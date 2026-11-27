@@ -260,7 +260,7 @@ const CLOUD_KEY = 'lens_inventory_v1';
 const LOCAL_CACHE_KEY = 'lens_inventory_local_cache_v1';
 const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-const POWERS = ['-0.75D','-1.00D','-1.25D','-1.50D','-1.75D','-2.00D','-2.25D','-2.50D','-2.75D','-3.00D','-3.25D','-3.50D'];
+const POWERS = ['-0.50D','-0.75D','-1.00D','-1.25D','-1.50D','-1.75D','-2.00D','-2.25D','-2.50D','-2.75D','-3.00D','-3.25D','-3.50D'];
 const today = () => new Date().toISOString().slice(0,10);
 let editingId = null;
 
