@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>软镜库存管理 · Clinical Trial Contact Lens Inventory</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+    --brand:#2563eb; --brand-d:#1d4ed8;
+    --ok:#16a34a; --ok-bg:#dcfce7; --ok-line:#86efac;
+    --low:#ca8a04; --low-bg:#fef9c3; --low-line:#fde047;
+    --danger:#dc2626; --danger-bg:#fee2e2; --danger-line:#fca5a5;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;}
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-d));color:#fff;padding:18px 24px;}
+  header h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.3px;}
+  header p{margin:4px 0 0;font-size:12px;opacity:.88;}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 24px 60px;}
+  .stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:150px;flex:1;}
+  .stat .num{font-size:26px;font-weight:800;}
+  .stat .lbl{color:var(--muted);font-size:12px;margin-top:2px;}
+  .stat.warn .num{color:var(--danger);}
+  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:600;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{background:var(--brand);color:#fff;}
+  .btn-primary:hover:not(:disabled){background:var(--brand-d);}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);}
+  .btn-ghost:hover:not(:disabled){background:#f3f4f6;}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .btn-sm{padding:6px 12px;font-size:13px;}
+  .card-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:20px;}
+  .card-panel h2{margin:0 0 14px;font-size:16px;display:flex;align-items:center;gap:8px;}
+  .section-tag{font-size:11px;background:#eef2ff;color:var(--brand);padding:2px 8px;border-radius:20px;font-weight:700;}
+  /* 预警 */
+  .alert-box{background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:12px;padding:14px 16px;margin-bottom:18px;}
+  .alert-box h3{margin:0 0 8px;color:var(--danger);font-size:14px;display:flex;align-items:center;gap:6px;}
+  .alert-list{display:flex;gap:10px;flex-wrap:wrap;}
+  .alert-chip{background:#fff;border:1px solid var(--danger-line);color:var(--danger);border-radius:20px;padding:5px 12px;font-weight:700;font-size:13px;}
+  /* 库存卡片 */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;}
+  .inv-card{border-radius:12px;padding:16px;border:1px solid var(--line);background:#fff;position:relative;overflow:hidden;}
+  .inv-card.ok{border-color:var(--ok-line);background:var(--ok-bg);}
+  .inv-card.low{border-color:var(--low-line);background:var(--low-bg);}
+  .inv-card.danger{border-color:var(--danger-line);background:var(--danger-bg);}
+  .inv-card .power{font-size:18px;font-weight:800;}
+  .inv-card .qty{font-size:30px;font-weight:900;margin:6px 0 2px;}
+  .inv-card .qty small{font-size:13px;font-weight:600;color:var(--muted);}
+  .inv-card .status{font-size:12px;font-weight:700;}
+  .inv-card.ok .status{color:var(--ok);}
+  .inv-card.low .status{color:var(--low);}
+  .inv-card.danger .status{color:var(--danger);}
+  .dot{position:absolute;top:14px;right:14px;width:12px;height:12px;border-radius:50%;}
+  .dot.ok{background:var(--ok);} .dot.low{background:var(--low);} .dot.danger{background:var(--danger);}
+  /* 表格 */
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;}
+  input,select,textarea{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);}
+  input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:var(--brand);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
+  th{background:#f8fafc;color:var(--muted);font-weight:700;position:sticky;top:0;}
+  tr:hover td{background:#f9fafb;}
+  .tag{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;}
+  .tag.reissue{background:#fef3c7;color:#b45309;}
+  .tag.normal{background:#e0f2fe;color:#0369a1;}
+  .muted{color:var(--muted);}
+  .empty{text-align:center;color:var(--muted);padding:24px;}
+  /* 病人查询 */
+  .ptq{display:flex;gap:10px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap;}
+  .pt-result{margin-top:6px;overflow-x:auto;}
+  .copy-btn{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;}
+  .copy-btn:hover{background:#d1fae5;}
+  /* 弹窗 */
+  .mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .mask.show{display:flex;}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .modal h3{margin:0;padding:18px 20px;border-bottom:1px solid var(--line);font-size:17px;}
+  .modal .body{padding:18px 20px;display:flex;flex-direction:column;gap:14px;}
+  .modal .foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .req::after{content:" *";color:var(--danger);}
+  .msg{font-size:13px;padding:10px 12px;border-radius:8px;display:none;}
+  .msg.err{background:var(--danger-bg);color:var(--danger);display:block;}
+  .msg.ok{background:var(--ok-bg);color:var(--ok);display:block;}
+  .hint{font-size:12px;color:var(--muted);}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;transition:.25s;z-index:99;pointer-events:none;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;}
+  .cloud-bar{background:#eff6ff;border-bottom:1px solid #bfdbfe;color:#1e40af;font-size:13px;padding:8px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  @media(max-width:560px){.row2{grid-template-columns:1fr;}.wrap{padding:14px 14px 50px;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>软镜库存管理</h1>
+  <p>Clinical Trial Contact Lens Inventory · 库存单位：盒（Box） · 云端实时同步</p>
+</header>
+
+<div class="cloud-bar">
+  <span id="cloudStatus">☁️ 正在连接云端数据库...</span>
+  <span style="font-size:12px;color:#3b82f6;">支持手机 / 电脑多端实时共享</span>
+</div>
+
+<div class="wrap">
+  <!-- 统计 -->
+  <div class="stats">
+    <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">总库存（盒）</div></div>
+    <div class="stat warn"><div class="num" id="statLow">0</div><div class="lbl">待补货度数数量（≤5盒）</div></div>
+    <div class="stat"><div class="num" id="statToday">0</div><div class="lbl">今日发镜（盒）</div></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn-primary" onclick="openDispense()">＋ 发镜</button>
+    <button class="btn-ghost" onclick="openStockIn()">＋ 入库</button>
+    <button class="btn-ghost" onclick="document.getElementById('dbFileInput').click()" style="margin-left:auto">📥 导入旧数据库 (.db)</button>
+    <button class="btn-ghost" onclick="exportJsonBackup()">📤 导出备份</button>
+    <input type="file" id="dbFileInput" accept=".db,.sqlite,.sqlite3" style="display:none" onchange="importSqliteFile(event)" />
+  </div>
+
+  <!-- 预警 -->
+  <div id="alertBox"></div>
+
+  <!-- 库存卡片 -->
+  <div class="card-panel">
+    <h2>首页库存 <span class="section-tag">实时</span></h2>
+    <div class="grid" id="invGrid"></div>
+  </div>
+
+  <!-- 病人查询 -->
+  <div class="card-panel">
+    <h2>病人发镜历史查询</h2>
+    <div class="ptq">
+      <div class="field">
+        <label>病人序号</label>
+        <input id="ptInput" placeholder="输入病人序号，如 41 或 P001" style="min-width:200px" />
+      </div>
+      <button class="btn-primary" onclick="queryPatient()">查询</button>
+      <button class="copy-btn" id="ptCopy" style="display:none" onclick="copyPatient()">复制发镜信息</button>
+    </div>
+    <div class="pt-result" id="ptResult"></div>
+  </div>
+
+  <!-- 发镜记录 -->
+  <div class="card-panel">
+    <h2>发镜记录 <span class="section-tag">时间倒序</span></h2>
+    <div class="filters">
+      <div class="field"><label>病人序号</label><input id="fPatient" placeholder="搜索病人序号" /></div>
+      <div class="field"><label>日期</label><input id="fDate" type="date" /></div>
+      <div class="field"><label>度数</label>
+        <select id="fPower"><option value="">全部度数</option></select>
+      </div>
+      <button class="btn-ghost btn-sm" onclick="loadRecords()">筛选</button>
+      <button class="btn-ghost btn-sm" onclick="resetFilters()">重置</button>
+    </div>
+    <div style="overflow:auto;max-height:460px;">
+      <table id="recTable">
+        <thead><tr>
+          <th>日期</th><th>病人序号</th><th>OD(右)</th><th>OS(左)</th><th>发放数量(盒)</th>
+          <th>操作人员</th><th>是否补发</th><th>备注</th><th>操作</th>
+        </tr></thead>
+        <tbody id="recBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 发镜弹窗 -->
+<div class="mask" id="dispenseMask">
+  <div class="modal">
+    <h3 id="dispenseTitle">发镜登记</h3>
+    <div class="body">
+      <div class="field"><label class="req">发镜日期</label><input id="dDate" type="date" /></div>
+      <div class="field"><label class="req">病人序号</label><input id="dPatient" placeholder="如 41 或 P001" /></div>
+      <div class="row2">
+        <div class="field"><label>右眼(OD)度数</label><select id="dOd"></select></div>
+        <div class="field"><label>右眼发放数量(盒)</label><input id="dOdQty" type="number" min="0" value="1" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>左眼(OS)度数</label><select id="dOs"></select></div>
+        <div class="field"><label>左眼发放数量(盒)</label><input id="dOsQty" type="number" min="0" value="1" /></div>
+      </div>
+      <div class="field"><label>操作人员</label><input id="dOperator" value="admin" /></div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+        <input type="checkbox" id="dReissue" style="width:auto" /> 补发
+      </label>
+      <div class="field"><label>备注（可选）</label><textarea id="dNote" rows="2" placeholder="选填"></textarea></div>
+      <div class="msg" id="dMsg"></div>
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" onclick="closeDispense()">取消</button>
+      <button class="btn-primary" onclick="submitDispense()">确认发镜</button>
+    </div>
+  </div>
+</div>
+
+<!-- 入库弹窗 -->
+<div class="mask" id="stockMask">
+  <div class="modal">
+    <h3>入库登记</h3>
+    <div class="body">
+      <div class="field"><label class="req">日期</label><input id="sDate" type="date" /></div>
+      <div class="field"><label class="req">度数</label><select id="sPower"></select></div>
+      <div class="field"><label class="req">入库数量(盒)</label><input id="sQty" type="number" min="1" value="1" /></div>
+      <div class="field"><label>来源</label>
+        <select id="sSource"><option value="采购">采购</option><option value="调拨">调拨</option><option value="其他">其他</option></select>
+      </div>
+      <div class="field"><label>操作人员</label><input id="sOperator" value="admin" /></div>
+      <div class="field"><label>备注（可选）</label><textarea id="sNote" rows="2" placeholder="选填"></textarea></div>
+      <div class="msg" id="sMsg"></div>
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" onclick="closeStockIn()">取消</button>
+      <button class="btn-primary" onclick="submitStockIn()">确认入库</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 度数明细弹窗 -->
+<div class="mask" id="powerMask">
+  <div class="modal" style="max-width:640px">
+    <h3 id="pdTitle">度数明细</h3>
+    <div class="body">
+      <div class="stats" style="margin-bottom:6px">
+        <div class="stat"><div class="num" id="pdStock">0</div><div class="lbl">当前库存（盒）</div></div>
+        <div class="stat"><div class="num" id="pdIn">0</div><div class="lbl">累计入库（盒）</div></div>
+        <div class="stat"><div class="num" id="pdOut">0</div><div class="lbl">累计发镜（盒）</div></div>
+      </div>
+      <div class="hint" id="pdCheck"></div>
+      <div class="card-panel" style="margin:0">
+        <h2>入库明细</h2>
+        <div style="overflow:auto;max-height:200px">
+          <table id="pdInTable"><thead><tr><th>日期</th><th>数量(盒)</th><th>来源</th><th>操作人员</th><th>备注</th><th>操作</th></tr></thead><tbody id="pdInBody"></tbody></table>
+        </div>
+      </div>
+      <div class="card-panel" style="margin:0">
+        <h2>发镜明细</h2>
+        <div style="overflow:auto;max-height:240px">
+          <table id="pdOutTable"><thead><tr><th>日期</th><th>病人序号</th><th>眼别</th><th>本度数(盒)</th><th>操作人员</th><th>补发</th></tr></thead><tbody id="pdOutBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><button class="btn-primary" onclick="closePowerDetail()">关闭</button></div>
+  </div>
+</div>
+
+<script>
+// ============ Supabase 云端配置 ============
+const SUPABASE_URL = 'https://qrjoxgdvpvecxhvrcoze.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyam94Z2R2cHZlY3hodnJjb3plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2OTc3MzcsImV4cCI6MjExMTI3MzczN30.xk6pMdSR1Ghi8YrA5VXyyanR-V49HdbuZ5a-0ooKdgQ';
+const CLOUD_KEY = 'lens_inventory_v1';
+const LOCAL_CACHE_KEY = 'lens_inventory_local_cache_v1';
+const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+const POWERS = ['-0.75D','-1.00D','-1.25D','-1.50D','-1.75D','-2.00D','-2.25D','-2.50D','-2.75D','-3.00D','-3.25D','-3.50D'];
+const today = () => new Date().toISOString().slice(0,10);
+let editingId = null;
+
+// 核心数据结构
+function createEmptyState() {
+  const inv = {};
+  POWERS.forEach(p => inv[p] = 0);
+  return { inventory: inv, dispense_records: [], stock_in_records: [] };
+}
+
+let appState = createEmptyState();
+
+function setCloudStatus(text, isErr) {
+  const el = document.getElementById('cloudStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isErr ? '#dc2626' : '#1e40af';
+}
+
+// 保存到本地并同步至 Supabase
+async function saveState() {
+  try { localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(appState)); } catch(e) {}
+  if (!sbClient) return;
+  setCloudStatus('⏳ 正在同步到云端...', false);
+  try {
+    const { error } = await sbClient.from('app_data').upsert([
+      { key: CLOUD_KEY, value: appState, updated_at: new Date().toISOString() }
+    ]);
+    if (error) {
+      console.error('云端同步失败:', error);
+      setCloudStatus('⚠️ 云端同步失败：' + error.message, true);
+    } else {
+      const now = new Date();
+      const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+      setCloudStatus(`☁️ 已同步至云端（${t}）`, false);
+    }
+  } catch (e) {
+    console.error('云端同步异常:', e);
+    setCloudStatus('⚠️ 网络异常，暂存本地', true);
+  }
+}
+
+// 启动时从 Supabase 拉取最新数据
+async function initFromCloud() {
+  // 先加载本地缓存快速展示
+  try {
+    const cached = localStorage.getItem(LOCAL_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.inventory) appState = parsed;
+    }
+  } catch(e) {}
+
+  if (!sbClient) {
+    setCloudStatus('⚠️ 云端组件未加载，使用本地模式', true);
+    return;
+  }
+
+  try {
+    const { data, error } = await sbClient.from('app_data').select('value, updated_at').eq('key', CLOUD_KEY).maybeSingle();
+    if (error) {
+      console.error('拉取云端数据失败:', error);
+      setCloudStatus('⚠️ 云端读取失败：' + error.message, true);
+      return;
+    }
+    if (data && data.value && data.value.inventory) {
+      appState = data.value;
+      // 补全可能缺失的度数键
+      POWERS.forEach(p => { if (typeof appState.inventory[p] !== 'number') appState.inventory[p] = 0; });
+      if (!Array.isArray(appState.dispense_records)) appState.dispense_records = [];
+      if (!Array.isArray(appState.stock_in_records)) appState.stock_in_records = [];
+      try { localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(appState)); } catch(e) {}
+      setCloudStatus('☁️ 已连接云端数据库（数据已同步）', false);
+    } else {
+      setCloudStatus('☁️ 已连接云端（当前为空，请点击右上角「导入旧数据库 (.db)」）', false);
+    }
+  } catch (e) {
+    console.error('云端连接异常:', e);
+    setCloudStatus('⚠️ 云端连接超时，当前显示本地缓存', true);
+  }
+}
+
+// ============ 导入 SQLite (.db) 文件 ============
+async function importSqliteFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  if (!window.initSqlJs) {
+    toast('数据库解析组件未加载完成，请刷新页面后重试');
+    return;
+  }
+
+  toast('正在解析数据库文件...');
+  try {
+    const SQL = await initSqlJs({
+      locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`
+    });
+    const buffer = await file.arrayBuffer();
+    const db = new SQL.Database(new Uint8Array(buffer));
+
+    const newInv = {};
+    POWERS.forEach(p => newInv[p] = 0);
+
+    // 1. 读取 inventory 表
+    const invRes = db.exec('SELECT power, stock FROM inventory');
+    if (invRes.length > 0) {
+      invRes[0].values.forEach(([power, stock]) => {
+        if (power) newInv[String(power)] = Number(stock) || 0;
+      });
+    }
+
+    // 2. 读取 dispense_records 表
+    const newDispense = [];
+    let dispRes = [];
+    try {
+      dispRes = db.exec('SELECT id, date, patient_no, od_power, os_power, od_qty, os_qty, operator, note, is_reissue, created_at FROM dispense_records');
+    } catch (e) {
+      dispRes = db.exec('SELECT id, date, patient_no, od_power, os_power, od_qty, os_qty, operator, note, is_reissue FROM dispense_records');
+    }
+    if (dispRes.length > 0) {
+      dispRes[0].values.forEach(row => {
+        newDispense.push({
+          id: Number(row[0]),
+          date: String(row[1] || ''),
+          patient_no: String(row[2] || ''),
+          od_power: row[3] ? String(row[3]) : '',
+          os_power: row[4] ? String(row[4]) : '',
+          od_qty: Number(row[5]) || 0,
+          os_qty: Number(row[6]) || 0,
+          operator: row[7] ? String(row[7]) : 'admin',
+          note: row[8] ? String(row[8]) : '',
+          is_reissue: Number(row[9]) ? 1 : 0,
+          created_at: row[10] ? String(row[10]) : new Date().toISOString()
+        });
+      });
+    }
+
+    // 3. 读取 stock_in_records 表
+    const newStockIn = [];
+    let inRes = [];
+    try {
+      inRes = db.exec('SELECT id, date, power, qty, source, note, operator, created_at FROM stock_in_records');
+    } catch (e) {
+      inRes = db.exec('SELECT id, date, power, qty, source, note, operator FROM stock_in_records');
+    }
+    if (inRes.length > 0) {
+      inRes[0].values.forEach(row => {
+        newStockIn.push({
+          id: Number(row[0]),
+          date: String(row[1] || ''),
+          power: String(row[2] || ''),
+          qty: Number(row[3]) || 0,
+          source: row[4] ? String(row[4]) : '采购',
+          note: row[5] ? String(row[5]) : '',
+          operator: row[6] ? String(row[6]) : 'admin',
+          created_at: row[7] ? String(row[7]) : new Date().toISOString()
+        });
+      });
+    }
+
+    db.close();
+
+    const ok = confirm(`已成功解析数据库文件！\n\n· 库存度数：${Object.keys(newInv).length} 档\n· 发镜记录：${newDispense.length} 条\n· 入库记录：${newStockIn.length} 条\n\n确认导入并覆盖上传到云端数据库吗？`);
+    if (!ok) return;
+
+    appState = {
+      inventory: newInv,
+      dispense_records: newDispense,
+      stock_in_records: newStockIn
+    };
+
+    await saveState();
+    loadAll();
+    toast(`✅ 导入成功！已同步 ${newDispense.length} 条发镜与 ${newStockIn.length} 条入库记录`);
+  } catch (err) {
+    console.error(err);
+    alert('导入失败，请确认选择的是正确的 .db 数据库文件。\n错误信息：' + err.message);
+  }
+}
+
+function exportJsonBackup() {
+  const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `软镜库存备份_${today()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('已导出备份文件');
+}
+
+// ============ 页面渲染与业务逻辑 ============
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function fillPowers(sel, withEmpty){sel.innerHTML = (withEmpty?'<option value="">— 不发此眼 —</option>':'') + POWERS.map(p=>`<option value="${p}">${p}</option>`).join('');}
+
+function getStockStatus(stock) {
+  if (stock <= 0) return { status: 'danger', statusLabel: '缺货（需补货）' };
+  if (stock <= 5) return { status: 'low', statusLabel: '库存偏低（≤5盒）' };
+  return { status: 'ok', statusLabel: '库存充足' };
+}
+
+function loadAll(){
+  loadInventory();
+  loadStats();
+  loadAlerts();
+  loadRecords();
+}
+
+function loadInventory(){
+  const grid = document.getElementById('invGrid');
+  grid.innerHTML = POWERS.map(power => {
+    const stock = appState.inventory[power] || 0;
+    const { status, statusLabel } = getStockStatus(stock);
+    return `
+    <div class="inv-card ${status}" style="cursor:pointer" title="点击查看入库与发镜明细"
+         onclick="openPowerDetail('${power}')">
+      <span class="dot ${status}"></span>
+      <div class="power">${power}</div>
+      <div class="qty">${stock} <small>盒</small></div>
+      <div class="status">${statusLabel}</div>
+      <div class="hint" style="margin-top:8px">点击查看明细 ›</div>
+    </div>`;
+  }).join('');
+}
+
+function loadStats(){
+  let totalStock = 0, lowStockCount = 0;
+  POWERS.forEach(p => {
+    const s = appState.inventory[p] || 0;
+    totalStock += s;
+    if (s <= 5) lowStockCount++;
+  });
+  const td = today();
+  const todayDispenseBoxes = appState.dispense_records
+    .filter(r => r.date === td)
+    .reduce((sum, r) => sum + (Number(r.od_qty) || 0) + (Number(r.os_qty) || 0), 0);
+
+  document.getElementById('statTotal').textContent = totalStock;
+  document.getElementById('statLow').textContent = lowStockCount;
+  document.getElementById('statToday').textContent = todayDispenseBoxes;
+}
+
+function loadAlerts(){
+  const lowList = POWERS
+    .map(p => ({ power: p, stock: appState.inventory[p] || 0 }))
+    .filter(it => it.stock <= 5);
+  const box = document.getElementById('alertBox');
+  if (!lowList.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="alert-box"><h3>⚠ 以下度数库存不足（≤5盒）</h3>
+    <div class="alert-list">${lowList.map(d => `<span class="alert-chip">${d.power}（${d.stock}盒）</span>`).join('')}</div></div>`;
+}
+
+function loadRecords(){
+  const p = document.getElementById('fPatient').value.trim().toLowerCase();
+  const dt = document.getElementById('fDate').value;
+  const pw = document.getElementById('fPower').value;
+
+  const filtered = appState.dispense_records
+    .filter(r => {
+      if (p && !String(r.patient_no || '').toLowerCase().includes(p)) return false;
+      if (dt && r.date !== dt) return false;
+      if (pw && r.od_power !== pw && r.os_power !== pw) return false;
+      return true;
+    })
+    .sort((a, b) => (b.date.localeCompare(a.date)) || (b.id - a.id));
+
+  const body = document.getElementById('recBody');
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="9" class="empty">暂无发镜记录</td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(r => {
+    const totalQty = (Number(r.od_qty) || 0) + (Number(r.os_qty) || 0);
+    return `
+    <tr>
+      <td>${r.date}</td>
+      <td>${r.patient_no}</td>
+      <td>${r.od_power ? `${r.od_power} (${r.od_qty}盒)` : '—'}</td>
+      <td>${r.os_power ? `${r.os_power} (${r.os_qty}盒)` : '—'}</td>
+      <td><b>${totalQty}</b></td>
+      <td>${r.operator || '—'}</td>
+      <td>${r.is_reissue ? '<span class="tag reissue">补发</span>' : '<span class="tag normal">首配</span>'}</td>
+      <td class="muted">${r.note || ''}</td>
+      <td>
+        <button class="btn-ghost btn-sm" onclick="editRecord(${r.id})">编辑</button>
+        <button class="btn-danger btn-sm" onclick="deleteRecord(${r.id})">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function resetFilters(){
+  document.getElementById('fPatient').value = '';
+  document.getElementById('fDate').value = '';
+  document.getElementById('fPower').value = '';
+  loadRecords();
+}
+
+// 发镜新增 / 编辑
+function openDispense(){
+  editingId = null;
+  document.getElementById('dispenseTitle').textContent = '发镜登记';
+  fillPowers(document.getElementById('dOd'), true);
+  fillPowers(document.getElementById('dOs'), true);
+  document.getElementById('dDate').value = today();
+  document.getElementById('dPatient').value = '';
+  document.getElementById('dOdQty').value = 1;
+  document.getElementById('dOsQty').value = 1;
+  document.getElementById('dOperator').value = 'admin';
+  document.getElementById('dReissue').checked = false;
+  document.getElementById('dNote').value = '';
+  document.getElementById('dMsg').className = 'msg';
+  document.getElementById('dispenseMask').classList.add('show');
+}
+function closeDispense(){ document.getElementById('dispenseMask').classList.remove('show'); }
+
+async function submitDispense(){
+  const msg = document.getElementById('dMsg');
+  msg.className = 'msg';
+  const date = document.getElementById('dDate').value;
+  const patient_no = document.getElementById('dPatient').value.trim();
+  const od_power = document.getElementById('dOd').value;
+  const os_power = document.getElementById('dOs').value;
+  const od_qty = od_power ? (parseInt(document.getElementById('dOdQty').value, 10) || 0) : 0;
+  const os_qty = os_power ? (parseInt(document.getElementById('dOsQty').value, 10) || 0) : 0;
+  const operator = document.getElementById('dOperator').value.trim() || 'admin';
+  const note = document.getElementById('dNote').value.trim();
+  const is_reissue = document.getElementById('dReissue').checked ? 1 : 0;
+
+  if (!date) { msg.className='msg err'; msg.textContent='请选择发镜日期'; return; }
+  if (!patient_no) { msg.className='msg err'; msg.textContent='请填写病人序号'; return; }
+  if ((!od_power && !os_power) || (od_qty + os_qty <= 0)) {
+    msg.className='msg err'; msg.textContent='请至少选择一只眼睛的度数，且发放数量大于0'; return;
+  }
+
+  // 模拟库存变动以校验余额
+  const tempInv = { ...appState.inventory };
+  let oldRec = null;
+  if (editingId !== null) {
+    oldRec = appState.dispense_records.find(r => r.id === editingId);
+    if (!oldRec) { msg.className='msg err'; msg.textContent='未找到原记录'; return; }
+    if (oldRec.od_power) tempInv[oldRec.od_power] = (tempInv[oldRec.od_power] || 0) + (Number(oldRec.od_qty) || 0);
+    if (oldRec.os_power) tempInv[oldRec.os_power] = (tempInv[oldRec.os_power] || 0) + (Number(oldRec.os_qty) || 0);
+  }
+
+  // 计算本次各度数所需总数
+  const needed = {};
+  if (od_power && od_qty > 0) needed[od_power] = (needed[od_power] || 0) + od_qty;
+  if (os_power && os_qty > 0) needed[os_power] = (needed[os_power] || 0) + os_qty;
+
+  for (const [pw, reqQty] of Object.entries(needed)) {
+    const avail = tempInv[pw] || 0;
+    if (avail < reqQty) {
+      msg.className = 'msg err';
+      msg.textContent = `${pw} 库存不足（可用 ${avail} 盒，本次需 ${reqQty} 盒）`;
+      return;
+    }
+    tempInv[pw] = avail - reqQty;
+  }
+
+  // 正式应用库存与记录
+  appState.inventory = tempInv;
+  if (editingId !== null && oldRec) {
+    Object.assign(oldRec, { date, patient_no, od_power, os_power, od_qty, os_qty, operator, note, is_reissue });
+  } else {
+    const nextId = appState.dispense_records.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1;
+    appState.dispense_records.push({
+      id: nextId, date, patient_no, od_power, os_power, od_qty, os_qty,
+      operator, note, is_reissue, created_at: new Date().toISOString()
+    });
+  }
+
+  msg.className = 'msg ok';
+  msg.textContent = editingId !== null ? '修改成功' : '发镜登记成功';
+  toast(editingId !== null ? '发镜记录已更新' : '发镜成功');
+  editingId = null;
+  loadAll();
+  await saveState();
+  setTimeout(closeDispense, 500);
+}
+
+function editRecord(id){
+  const r = appState.dispense_records.find(item => item.id === id);
+  if (!r) { toast('记录不存在'); return; }
+  editingId = id;
+  document.getElementById('dispenseTitle').textContent = '编辑发镜登记';
+  fillPowers(document.getElementById('dOd'), true);
+  fillPowers(document.getElementById('dOs'), true);
+  document.getElementById('dDate').value = r.date;
+  document.getElementById('dPatient').value = r.patient_no || '';
+  document.getElementById('dOd').value = r.od_power || '';
+  document.getElementById('dOs').value = r.os_power || '';
+  document.getElementById('dOdQty').value = r.od_power ? (r.od_qty || 1) : 0;
+  document.getElementById('dOsQty').value = r.os_power ? (r.os_qty || 1) : 0;
+  document.getElementById('dOperator').value = r.operator || 'admin';
+  document.getElementById('dReissue').checked = !!r.is_reissue;
+  document.getElementById('dNote').value = r.note || '';
+  document.getElementById('dMsg').className = 'msg';
+  document.getElementById('dispenseMask').classList.add('show');
+}
+
+async function deleteRecord(id){
+  if (!confirm('确定删除这条发镜记录？删除后对应数量的库存会自动退回。')) return;
+  const idx = appState.dispense_records.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  const r = appState.dispense_records[idx];
+  if (r.od_power) appState.inventory[r.od_power] = (appState.inventory[r.od_power] || 0) + (Number(r.od_qty) || 0);
+  if (r.os_power) appState.inventory[r.os_power] = (appState.inventory[r.os_power] || 0) + (Number(r.os_qty) || 0);
+  appState.dispense_records.splice(idx, 1);
+  loadAll();
+  await saveState();
+  toast('已删除并退回库存');
+}
+
+// 入库
+function openStockIn(){
+  fillPowers(document.getElementById('sPower'), false);
+  document.getElementById('sDate').value = today();
+  document.getElementById('sQty').value = 1;
+  document.getElementById('sSource').value = '采购';
+  document.getElementById('sOperator').value = 'admin';
+  document.getElementById('sNote').value = '';
+  document.getElementById('sMsg').className = 'msg';
+  document.getElementById('stockMask').classList.add('show');
+}
+function closeStockIn(){ document.getElementById('stockMask').classList.remove('show'); }
+
+async function submitStockIn(){
+  const msg = document.getElementById('sMsg');
+  msg.className = 'msg';
+  const date = document.getElementById('sDate').value;
+  const power = document.getElementById('sPower').value;
+  const qty = parseInt(document.getElementById('sQty').value, 10);
+  const source = document.getElementById('sSource').value;
+  const operator = document.getElementById('sOperator').value.trim() || 'admin';
+  const note = document.getElementById('sNote').value.trim();
+
+  if (!date) { msg.className='msg err'; msg.textContent='请选择入库日期'; return; }
+  if (!power) { msg.className='msg err'; msg.textContent='请选择度数'; return; }
+  if (!qty || qty <= 0) { msg.className='msg err'; msg.textContent='入库数量必须大于0'; return; }
+
+  appState.inventory[power] = (appState.inventory[power] || 0) + qty;
+  const nextId = appState.stock_in_records.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1;
+  appState.stock_in_records.push({
+    id: nextId, date, power, qty, source, operator, note, created_at: new Date().toISOString()
+  });
+
+  msg.className = 'msg ok';
+  msg.textContent = '入库成功';
+  toast('入库成功');
+  loadAll();
+  await saveState();
+  setTimeout(closeStockIn, 500);
+}
+
+// 病人查询
+let lastPtText = '';
+function queryPatient(){
+  const no = document.getElementById('ptInput').value.trim();
+  const box = document.getElementById('ptResult');
+  if (!no) { box.innerHTML = '<span class="muted">请输入病人序号</span>'; return; }
+  const list = appState.dispense_records
+    .filter(r => String(r.patient_no || '').trim().toLowerCase() === no.toLowerCase())
+    .sort((a, b) => (b.date.localeCompare(a.date)) || (b.id - a.id));
+
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">未找到病人 ${no} 的发镜记录</div>`;
+    document.getElementById('ptCopy').style.display = 'none';
+    return;
+  }
+  const rows = list.map(r => {
+    const totalQty = (Number(r.od_qty) || 0) + (Number(r.os_qty) || 0);
+    return `<tr>
+      <td>${r.date}</td>
+      <td>${r.od_power || '—'}</td>
+      <td>${r.os_power || '—'}</td>
+      <td><b>${totalQty}</b></td>
+      <td>${r.is_reissue ? '<span class="tag reissue">补发</span>' : '<span class="tag normal">首配</span>'}</td>
+      <td class="muted">${r.note || ''}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `<table><thead><tr><th>发镜日期</th><th>OD(右)</th><th>OS(左)</th><th>发放数量(盒)</th><th>是否补发</th><th>备注</th></tr></thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('ptCopy').style.display = '';
+  lastPtText = `病人序号 ${no} 发镜记录：\n` + list.map(r => {
+    const totalQty = (Number(r.od_qty) || 0) + (Number(r.os_qty) || 0);
+    return `${r.date} | OD:${r.od_power||'-'} OS:${r.os_power||'-'} | ${totalQty}盒 | ${r.is_reissue?'补发':'首配'}`;
+  }).join('\n');
+}
+async function copyPatient(){
+  try { await navigator.clipboard.writeText(lastPtText); toast('已复制到剪贴板'); }
+  catch(e) { toast('复制失败，请手动选择'); }
+}
+
+// 度数明细
+function openPowerDetail(power){
+  const stock = appState.inventory[power] || 0;
+  const stockIn = appState.stock_in_records
+    .filter(r => r.power === power)
+    .sort((a, b) => (b.date.localeCompare(a.date)) || (b.id - a.id));
+  const totalIn = stockIn.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+
+  const dispense = appState.dispense_records
+    .filter(r => r.od_power === power || r.os_power === power)
+    .map(r => {
+      const odMatch = r.od_power === power;
+      const osMatch = r.os_power === power;
+      const eye = (odMatch && osMatch) ? '双眼' : (odMatch ? '右眼(OD)' : '左眼(OS)');
+      const contribution = (odMatch ? (Number(r.od_qty) || 0) : 0) + (osMatch ? (Number(r.os_qty) || 0) : 0);
+      return { ...r, eye, contribution };
+    })
+    .sort((a, b) => (b.date.localeCompare(a.date)) || (b.id - a.id));
+  const totalOut = dispense.reduce((sum, r) => sum + r.contribution, 0);
+
+  document.getElementById('pdTitle').textContent = `度数明细 · ${power}`;
+  document.getElementById('pdStock').textContent = stock;
+  document.getElementById('pdIn').textContent = totalIn;
+  document.getElementById('pdOut').textContent = totalOut;
+  const ok = (totalIn - totalOut) === stock;
+  document.getElementById('pdCheck').innerHTML = ok
+    ? `<span style="color:var(--ok)">✓ 入库 ${totalIn} − 发镜 ${totalOut} = 当前库存 ${stock}</span>`
+    : `<span style="color:var(--danger)">⚠ 入库 ${totalIn} − 发镜 ${totalOut} ≠ 当前库存 ${stock}</span>`;
+
+  const inBody = document.getElementById('pdInBody');
+  inBody.innerHTML = stockIn.length ? stockIn.map(r => `<tr><td>${r.date}</td><td><b>${r.qty}</b></td><td>${r.source||'—'}</td><td>${r.operator||'—'}</td><td class="muted">${r.note||''}</td><td><button class="btn-danger btn-sm" onclick="undoStockIn(${r.id},'${power}')">撤销</button></td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">暂无入库记录</td></tr>';
+
+  const outBody = document.getElementById('pdOutBody');
+  outBody.innerHTML = dispense.length ? dispense.map(r => `<tr><td>${r.date}</td><td>${r.patient_no}</td><td>${r.eye}</td><td><b>${r.contribution}</b></td><td>${r.operator||'—'}</td><td>${r.is_reissue?'<span class="tag reissue">补发</span>':'—'}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">暂无发镜记录</td></tr>';
+
+  document.getElementById('powerMask').classList.add('show');
+}
+function closePowerDetail(){ document.getElementById('powerMask').classList.remove('show'); }
+
+async function undoStockIn(id, power){
+  const idx = appState.stock_in_records.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  const rec = appState.stock_in_records[idx];
+  const curStock = appState.inventory[rec.power] || 0;
+  if (curStock < rec.qty) {
+    alert(`当前库存仅剩 ${curStock} 盒，不足以撤销该笔 ${rec.qty} 盒入库。`);
+    return;
+  }
+  if (!confirm(`确定撤销这条 ${rec.qty} 盒的入库记录？撤销后对应库存会自动扣回。`)) return;
+  appState.inventory[rec.power] = curStock - rec.qty;
+  appState.stock_in_records.splice(idx, 1);
+  loadAll();
+  await saveState();
+  openPowerDetail(power);
+  toast('已撤销入库');
+}
+
+// 初始化
+fillPowers(document.getElementById('fPower'), true);
+document.querySelectorAll('.mask').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+
+(async function() {
+  await initFromCloud();
+  loadAll();
+})();
+</script>
+</body>
+</html>
